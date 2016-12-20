@@ -6,31 +6,63 @@
  * of the BSD 3-clause license. See the LICENSE file for details.
  */
 
-package org.cobol85.preprocessor;
+package io.proleap.cobol.preprocessor;
 
 import java.io.File;
 import java.io.IOException;
+import java.util.regex.Pattern;
 
-public interface Cobol85Preprocessor {
+public interface CobolPreprocessor {
 
-	public interface Cobol85Format {
-
-		String indicatorField = "([ABCdD\\-/* ])";
-
-		String getRegex();
+	public enum CobolDialect {
+		ANSI85, MF, OSVS
 	}
 
-	public enum Cobol85FormatEnum implements Cobol85Format {
+	/**
+	 * Representation of a Cobol line.
+	 */
+	public class CobolLine {
 
-		/**
-		 * Custom layout 1.
-		 */
-		CUSTOM_1("(\\s*[0-9]+)(?:.{7}" + indicatorField + "(.{0,65})(.*)?)?"),
+		public String comment;
 
-		/**
-		 * Format for handling irregular/defect lines.
-		 */
-		DEFECT("(\\s{7,})" + indicatorField + "([\\*]+)()"),
+		public String contentAreaA;
+
+		public String contentAreaB;
+
+		public char indicatorArea;
+
+		public CobolSourceFormat lineFormat;
+
+		public String sequenceArea;
+
+		public CobolLine(final String sequenceArea, final char indicatorArea, final String contentAreaA,
+				final String contentAreaB, final String comment, final CobolSourceFormat lineFormat) {
+			this.sequenceArea = sequenceArea;
+			this.indicatorArea = indicatorArea;
+			this.contentAreaA = contentAreaA;
+			this.contentAreaB = contentAreaB;
+			this.comment = comment;
+			this.lineFormat = lineFormat;
+		}
+
+		@Override
+		public String toString() {
+			return sequenceArea + indicatorArea + contentAreaA + contentAreaB + comment + " [" + lineFormat + "]";
+		}
+	}
+
+	public interface CobolSourceFormat {
+
+		String indicatorField = "([ABCdD\\t\\-/* ])";
+
+		Pattern getPattern();
+
+		String getRegex();
+
+		boolean isCommentEntryMultiLine();
+	}
+
+	public enum CobolSourceFormatEnum implements CobolSourceFormat {
 
 		/**
 		 * Fixed format, standard ANSI / IBM reference. Each line exactly 80
@@ -42,74 +74,73 @@ public interface Cobol85Preprocessor {
 		 * 13-72: area B<br />
 		 * 73-80: comments<br />
 		 */
-		FIXED("(.{6})" + indicatorField + "(.{65})(.{8})"),
+		FIXED("(.{6})" + indicatorField + "(.{4})(.{61})(.{8,})", true),
+
+		/**
+		 * Flexible fixed format. Each line up to 80 chars.<br />
+		 * <br />
+		 * 1-6: sequence area<br />
+		 * 7: indicator field<br />
+		 * 8-12: optional area A<br />
+		 * 13-72: optional area B<br />
+		 * 73-80: optional comments<br />
+		 */
+		FIXED_FLEX("(.{6})" + indicatorField + "(.{0,4})(.{0,61})(.*)", true),
 
 		/**
 		 * HP Tandem format.<br />
 		 * <br />
 		 * 1: indicator field<br />
-		 * 2-5: area A<br />
-		 * 6-132: area B<br />
+		 * 2-5: optional area A<br />
+		 * 6-132: optional area B<br />
 		 */
-		TANDEM("()" + indicatorField + "(.*)()"),
+		TANDEM("()" + indicatorField + "(.{0,4})(.*)()", false),
 
 		/**
 		 * Variable format.<br />
 		 * <br />
 		 * 1-6: sequence area<br />
 		 * 7: indicator field<br />
-		 * 8-12: area A<br />
-		 * 13-*: area B<br />
+		 * 8-12: optional area A<br />
+		 * 13-*: optional area B<br />
 		 */
-		VARIABLE("(.{6})(?:" + indicatorField + "(.*)())?");
+		VARIABLE("(.{6})(?:" + indicatorField + "(.{0,4})(.*)())?", true);
+
+		private final boolean commentEntryMultiLine;
+
+		private final Pattern pattern;
 
 		private final String regex;
 
-		Cobol85FormatEnum(final String regex) {
+		CobolSourceFormatEnum(final String regex, final boolean commentEntryMultiLine) {
 			this.regex = regex;
+			pattern = Pattern.compile(regex);
+			this.commentEntryMultiLine = commentEntryMultiLine;
+		}
+
+		@Override
+		public Pattern getPattern() {
+			return pattern;
 		}
 
 		@Override
 		public String getRegex() {
 			return regex;
 		}
-	}
-
-	/**
-	 * Representation of a Cobol 85 line.
-	 */
-	public class Cobol85Line {
-
-		public String comment;
-
-		public String contentArea;
-
-		public char indicatorArea;
-
-		public Cobol85Format lineFormat;
-
-		public String sequenceArea;
-
-		public Cobol85Line(final String sequenceArea, final char indicatorArea, final String contentArea,
-				final String comment, final Cobol85Format lineFormat) {
-			this.sequenceArea = sequenceArea;
-			this.indicatorArea = indicatorArea;
-			this.contentArea = contentArea;
-			this.comment = comment;
-			this.lineFormat = lineFormat;
-		}
 
 		@Override
-		public String toString() {
-			return sequenceArea + indicatorArea + contentArea + comment + " [" + lineFormat + "]";
+		public boolean isCommentEntryMultiLine() {
+			return commentEntryMultiLine;
 		}
 	}
 
-	String normalizeLine(Cobol85Line line, boolean isFirstLine);
+	String process(File cobolFile, File libDirectory, CobolSourceFormat format) throws IOException;
 
-	Cobol85Line parseCobol85Line(String line, Cobol85Format[] formats);
+	String process(File cobolFile, File libDirectory, CobolSourceFormat format, CobolDialect dialect)
+			throws IOException;
 
-	String process(File inputFile, File libDirectory, Cobol85Format[] formats) throws IOException;
+	String process(String cobolSourceCode, File libDirectory, CobolSourceFormat format);
 
-	String process(String input, File libDirectory, Cobol85Format[] formats);
+	String process(String cobolSourceCode, File libDirectory, CobolSourceFormat format, CobolDialect dialect);
+
 }

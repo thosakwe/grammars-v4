@@ -101,7 +101,7 @@ integer
 
 
 STRING
-   : [a-zA-Z] [a-zA-Z0-9_]*
+   : [a-z]+
    ;
 
 
@@ -109,12 +109,6 @@ INT
    : [0-9] +
    ;
 
-
-EOL
-   : '\r'? '\n'
-   ;
-
-
 WS
-   : [ \t\r\n] -> skip
+   : [ \r\n\t] -> skip
    ;
